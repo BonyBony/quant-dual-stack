@@ -1,1 +1,32 @@
-yaml version: "3.9" services: vectorbt_lab: build: ./research ports: - "${VBT_PORT-8888}:8888" volumes: - ./research/notebooks:/home/jovyan/work - ./execution/data:/home/jovyan/data environment: - JUPYTER_ENABLE_LAB=yes - NB_UID=1000 - NB_GID=1000 backtrader_exec: build: ./execution depends_on: - vectorbt_lab command: > sh -c "python run_live.py & streamlit run monitor_app.py" ports: - "${BT_PORT-8501}:8501" volumes: - ./execution/data:/app/data - ./execution/bt_config.yaml:/app/bt_config.yaml
+version: "3.9"
+
+services:
+  vectorbt_lab:
+    build: ./research
+    container_name: vectorbt_lab
+    ports:
+      - "${VBT_PORT:-8888}:8888"        # localhost:8888 → container:8888
+    volumes:
+      - ./research/notebooks:/home/jovyan/work    # live-edit notebooks
+      - ./execution/data:/home/jovyan/data        # share CSV signals
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      NB_UID: "1000"
+      NB_GID: "1000"
+
+  backtrader_exec:
+    build: ./execution
+    container_name: backtrader_exec
+    depends_on:
+      - vectorbt_lab
+    command: >
+      sh -c "
+        python run_live.py & \
+        streamlit run monitor_app.py --server.port 8501 --server.address 0.0.0.0
+      "
+    ports:
+      - "${BT_PORT:-8501}:8501"         # localhost:8501 → container:8501
+    volumes:
+      - ./execution/data:/app/data
+      - ./execution/bt_config.yaml:/app/bt_config.yaml
+
