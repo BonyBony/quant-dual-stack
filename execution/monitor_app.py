@@ -1,1 +1,24 @@
-python import streamlit as st, pandas as pd, time, pathlib st.title("Backtrader Live PnL") placeholder = st.empty() def load(): dfs = [pd.read_csv(f, names=["ts","eq"]) for f in pathlib.Path("data").glob("pnl.csv")] return pd.concat(dfs) if dfs else pd.DataFrame(columns=["ts","eq"]) while True: df = load() if not df.empty: placeholder.line_chart(df.set_index("ts")["eq"]) time.sleep(5)
+import streamlit as st
+import pandas as pd
+import time
+import pathlib
+
+st.set_page_config(page_title="Backtrader Live PnL", layout="wide")
+st.title("Backtrader Live PnL")
+
+placeholder = st.empty()
+
+DATA_DIR = pathlib.Path("data")
+PNL_FILE  = DATA_DIR / "pnl.csv"
+
+def load_pnl():
+    if not PNL_FILE.exists():
+        return pd.DataFrame(columns=["ts", "eq"])
+    return pd.read_csv(PNL_FILE, names=["ts", "eq"])
+
+while True:
+    df = load_pnl()
+    if not df.empty:
+        df["ts"] = pd.to_datetime(df["ts"])
+        placeholder.line_chart(df.set_index("ts")["eq"])
+    time.sleep(5)
