@@ -1,1 +1,5 @@
-dockerfile FROM jupyter/scipy-notebook:python-3.11 COPY requirements.txt /tmp/req.txt RUN pip install --no-cache-dir -r /tmp/req.txt
+FROM jupyter/scipy-notebook:python-3.11
+
+COPY requirements.txt /tmp/req.txt
+RUN pip install --no-cache-dir -r /tmp/req.txt
+

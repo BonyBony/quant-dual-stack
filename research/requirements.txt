@@ -1,0 +1,6 @@
+vectorbt
+yfinance
+nsepy
+scikit-learn
+ta
+pandas_ta
