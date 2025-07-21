@@ -1,0 +1,25 @@
+
+# --- OS / Editor cruft -----------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# --- Python byte-code ------------------
+__pycache__/
+*.py[cod]
+
+# --- Env & secrets ---------------------
+.env
+*.env
+
+# --- Data exports ----------------------
+data/*.csv
+
+# --- Docker artifacts ------------------
+*.log
+*.pid
+
+# --- Misc ------------------------------
+*.bak
+EOF
