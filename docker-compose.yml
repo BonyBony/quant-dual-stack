@@ -5,28 +5,53 @@ services:
     build: ./research
     container_name: vectorbt_lab
     ports:
-      - "${VBT_PORT:-8888}:8888"        # localhost:8888 → container:8888
+      - "${VBT_PORT:-8888}:8888"
     volumes:
-      - ./research/notebooks:/home/jovyan/work    # live-edit notebooks
-      - ./execution/data:/home/jovyan/data        # share CSV signals
+      - ./research/notebooks:/home/jovyan/work          # notebooks
+      - ./execution/data:/home/jovyan/data              # shared data
+      - ./common:/home/jovyan/common:ro                 # shared SOLID code
+      - ./research/artifacts:/home/jovyan/artifacts     # saved models/params
     environment:
       JUPYTER_ENABLE_LAB: "yes"
       NB_UID: "1000"
       NB_GID: "1000"
+      TZ: "Asia/Kolkata"
 
   backtrader_exec:
     build: ./execution
     container_name: backtrader_exec
     depends_on:
       - vectorbt_lab
+    # Run selector first, then your live + streamlit
     command: >
       sh -c "
-        python run_live.py & \
+        python jobs/select_macd_params.py &&
+        python run_live.py &
         streamlit run monitor_app.py --server.port 8501 --server.address 0.0.0.0
       "
+    env_file:
+      - .env                     # real values (copy from .env.example)
     ports:
-      - "${BT_PORT:-8501}:8501"         # localhost:8501 → container:8501
+      - "${BT_PORT:-8501}:8501"
     volumes:
       - ./execution/data:/app/data
       - ./execution/bt_config.yaml:/app/bt_config.yaml
+      - ./execution/cache:/app/cache                  # where params JSON lands
+      - ./common:/app/common:ro
+      - ./research/artifacts:/app/artifacts:ro
+    environment:
+      TZ: "Asia/Kolkata"
+
+  # Optional one-off service to just run the selector manually
+  selector:
+    build: ./execution
+    container_name: cpo_selector
+    working_dir: /app
+    env_file: .env
+    command: python jobs/select_macd_params.py
+    volumes:
+      - ./execution:/app
+      - ./common:/app/common:ro
+      - ./research/artifacts:/app/artifacts:ro
+    profiles: ["selector"]   # run: docker compose --profile selector run selector
 
