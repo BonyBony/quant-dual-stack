@@ -1,0 +1,16 @@
+symbol: "ZOMATO.NS"
+train_start: "2023-01-01"
+train_end:   "2023-12-31"
+test_start:  "2024-01-01"
+test_end:    "2024-12-31"
+
+macd_grid:
+  fast:   [6, 8, 10, 12, 14]
+  slow:   [20, 26, 30, 35, 40]
+  signal: [5, 7, 9]
+
+lookbacks: [5, 10, 20, 40, 80, 160, 320]
+model:
+  name: "gbrt"
+objective_freq_per_year: 252
+artifacts_dir: "research/artifacts/macd_cpo"
