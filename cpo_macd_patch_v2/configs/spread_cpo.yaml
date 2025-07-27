@@ -1,0 +1,17 @@
+primary: "TCS.NS"
+hedge:   "INFY.NS"
+train_start: "2019-01-01"
+train_end:   "2023-12-31"
+test_start:  "2024-01-01"
+test_end:    "2024-12-31"
+
+entry_threshold: [0.5, 0.7, 1.0, 1.5, 2.0]
+lookback:        [20, 40, 80, 160]
+beta_mode:       ["ols"]
+
+lookbacks_feat: [5, 10, 20, 40, 80, 160, 320]
+
+model:
+  name: "gbrt"
+
+objective_freq_per_year: 252
