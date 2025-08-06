@@ -7,6 +7,7 @@ services:
     ports:
       - "${VBT_PORT:-8888}:8888"
     volumes:
+      - .:/home/jovyan/repo
       - ./research/notebooks:/home/jovyan/work          # notebooks
       - ./execution/data:/home/jovyan/data              # shared data
       - ./common:/home/jovyan/common:ro                 # shared SOLID code
@@ -35,7 +36,7 @@ services:
       - "${BT_PORT:-8501}:8501"
     volumes:
       - ./execution/data:/app/data
-      - ./execution/bt_config.yaml:/app/bt_config.yaml
+      - ./execution/bt_config.yaml:/app/config/bt_config.yaml
       - ./execution/cache:/app/cache                  # where params JSON lands
       - ./common:/app/common:ro
       - ./research/artifacts:/app/artifacts:ro

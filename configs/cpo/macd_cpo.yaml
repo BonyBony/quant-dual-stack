@@ -1,4 +1,4 @@
-symbol: "ZOMATO.NS"
+symbol: "HDFCBANK.NS"
 train_start: "2023-01-01"
 train_end:   "2023-12-31"
 test_start:  "2024-01-01"
