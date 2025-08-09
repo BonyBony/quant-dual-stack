@@ -30,3 +30,28 @@ class MACDStrategy:
         if isinstance(pnl, pd.Series):
             pnl = pnl.iloc[0]
         return float(pnl)
+
+    def position(self, df_day: pd.DataFrame, params: MACDParams) -> int:
+        """Return the latest position for the provided data slice.
+
+        Parameters
+        ----------
+        df_day : pd.DataFrame
+            Price history up to and including the day of interest.
+        params : MACDParams
+            Strategy parameters.
+
+        Returns
+        -------
+        int
+            Latest position: +1 for long, -1 for short, 0 for flat.
+        """
+        if df_day.empty:
+            return 0
+
+        c = df_day["close"]
+        macd = c.ewm(span=params.fast).mean() - c.ewm(span=params.slow).mean()
+        signal = macd.ewm(span=params.signal).mean()
+        hist = macd - signal
+        pos = (hist > 0).astype(int) - (hist < 0).astype(int)
+        return int(pos.iloc[-1]) if not pos.empty else 0
