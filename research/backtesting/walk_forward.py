@@ -1,152 +1,168 @@
 from __future__ import annotations
-
-"""Walk-forward backtesting utilities with risk and cost modelling.
-
-This module provides a minimal yet extensible backtesting framework that is
-compatible with the existing research pipeline.  It supports:
-
-* walk-forward evaluation using a rolling train/test window
-* position sizing
-* stop-loss handling
-* transaction cost and slippage simulation
-
-The design follows SOLID principles by separating responsibilities across
-small data classes.
-"""
-
-from dataclasses import dataclass
-from typing import Iterable, Protocol
+from typing import Protocol, Iterable, List, Tuple
+import numpy as np
 import pandas as pd
 
-
 class Strategy(Protocol):
-    """Protocol for strategies used by the backtester."""
+    def position(self, df_slice: pd.DataFrame, params) -> int: ...
 
-    def position(self, df: pd.DataFrame, params: object) -> int:
-        """Return the latest position for the provided data slice."""
-
-
-@dataclass(frozen=True)
 class PositionSizer:
-    """Fixed-fractional position sizing."""
+    """Fixed fractional ‘risk per trade’ / notional fraction."""
+    def __init__(self, risk_per_trade: float):
+        self.risk_per_trade = float(risk_per_trade)
 
-    risk_per_trade: float
-
-    def size(self, equity: float, price: float) -> float:
-        return (equity * self.risk_per_trade) / price
-
-
-@dataclass(frozen=True)
 class StopLoss:
-    """Simple percentage stop loss."""
+    """Simple percentage stop on daily bars (close/close approximation)."""
+    def __init__(self, pct: float):
+        self.pct = float(pct)
 
-    pct: float
+    def _scalar(self, x) -> float:
+        if hasattr(x, "item"):
+            try:
+                return x.item()  # numpy/pandas 0-d
+            except Exception:
+                pass
+        try:
+            arr = np.asarray(x)
+            return float(arr.reshape(-1)[-1])
+        except Exception:
+            return float(x)
 
-    def hit(self, entry: float, current: float, side: int) -> bool:
-        if side > 0:
-            return (current - entry) / entry <= -self.pct
-        if side < 0:
-            return (entry - current) / entry <= -self.pct
+    def hit(self, entry_price, price, pos) -> bool:
+        e = self._scalar(entry_price)
+        p = self._scalar(price)
+        s = int(pos)
+        if s > 0:
+            return p <= e * (1.0 - self.pct)
+        if s < 0:
+            return p >= e * (1.0 + self.pct)
         return False
 
-
-@dataclass(frozen=True)
 class CostModel:
-    """Linear transaction cost and slippage model."""
+    """Linear costs applied on notional turnover (abs change in position * fraction)."""
+    def __init__(self, commission_pct: float = 0.0, slippage_pct: float = 0.0):
+        self.commission_pct = float(commission_pct)
+        self.slippage_pct  = float(slippage_pct)
 
-    commission_pct: float = 0.0
-    slippage_pct: float = 0.0
+    def turnover_cost(self, turnover_fraction: float) -> float:
+        # cost in return space (fraction of notional turned over)
+        return float(turnover_fraction) * (self.commission_pct + self.slippage_pct)
 
-    def cost(self, price: float, size: float) -> float:
-        trade_val = price * size
-        return trade_val * (self.commission_pct + self.slippage_pct)
-
-
-@dataclass
 class WalkForwardBacktester:
-    """Walk-forward backtesting engine.
-
-    Parameters
-    ----------
-    strategy : Strategy
-        Trading strategy implementing the :class:`Strategy` protocol.
-    position_sizer : PositionSizer
-        Determines number of shares/contracts to trade.
-    stop_loss : StopLoss
-        Stop-loss rule applied to open positions.
-    cost_model : CostModel
-        Transaction cost and slippage model.
-    train_window : int, default 252
-        Number of bars used for in-sample training.
-    test_window : int, default 252
-        Number of bars evaluated out-of-sample.
-    initial_equity : float, default 1.0
-        Starting account equity.
-    """
-
-    strategy: Strategy
-    position_sizer: PositionSizer
-    stop_loss: StopLoss
-    cost_model: CostModel
-    train_window: int = 252
-    test_window: int = 252
-    initial_equity: float = 1.0
+    def __init__(self,
+                 strategy: Strategy,
+                 position_sizer: PositionSizer,
+                 stop_loss: StopLoss,
+                 cost_model: CostModel,
+                 train_window: int = 252,
+                 test_window: int = 252,
+                 initial_equity: float = 1.0) -> None:
+        self.strategy = strategy
+        self.position_sizer = position_sizer
+        self.stop_loss = stop_loss
+        self.cost_model = cost_model
+        self.train_window = int(train_window)
+        self.test_window = int(test_window)
+        self.initial_equity = float(initial_equity)
 
     def run(self, df: pd.DataFrame, params: Iterable) -> pd.Series:
-        """Run walk-forward backtest over ``df`` starting in 2019.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            Price history with at least a ``close`` column and a ``DatetimeIndex``.
-        params : Iterable
-            Iterable of strategy parameter objects aligned with test periods.
-
-        Returns
-        -------
-        pd.Series
-            Equity curve indexed by test period end dates.
         """
+        Rolling walk-forward:
+          • For each train window, pick the param in `params` with highest in-sample Sharpe (net costs)
+          • Apply that param to the next test window
+          • Return a single pd.Series of daily returns named 'return'
+        """
+        cols = {c.lower() for c in df.columns}
+        assert "close" in cols, "df must include 'close' column"
+        close = df[[c for c in df.columns if c.lower() == "close"][0]].astype(float).values
+        idx   = df.index
+        n     = len(df)
+        if n < (self.train_window + self.test_window + 5):
+            return pd.Series(index=idx, data=np.nan, name="return").dropna()
 
-        df = df.loc[df.index >= pd.Timestamp("2019-01-01")]
-        days = df.index
-        equity = self.initial_equity
-        equity_curve = []
-        idx = []
+        out_rets: List[pd.Series] = []
+        i = self.train_window
+        while i + self.test_window <= n:
+            tr_slice = slice(i - self.train_window, i)      # [i-train, i)
+            te_slice = slice(i, i + self.test_window)       # [i, i+test)
+            best_param, _ = self._pick_best(close, idx, tr_slice, params)
+            rets_test = self._trade_window(close, idx, te_slice, best_param)
+            out_rets.append(rets_test)
+            i += self.test_window
+
+        if not out_rets:
+            return pd.Series(index=idx, data=np.nan, name="return").dropna()
+        rets = pd.concat(out_rets).sort_index()
+        rets.name = "return"
+        return rets
+
+    # ---------- internals ----------
+    def _pick_best(self, close: np.ndarray, idx: pd.Index, win: slice, params: Iterable) -> Tuple[object, float]:
+        best_p, best_s = None, -np.inf
+        for p in params:
+            r = self._trade_window(close, idx, win, p)
+            if r.empty or r.std() == 0:
+                score = -np.inf
+            else:
+                score = np.sqrt(252) * r.mean() / r.std()
+            if score > best_s:
+                best_s, best_p = score, p
+        return best_p, best_s
+
+    def _trade_window(self, close: np.ndarray, idx: pd.Index, win: slice, p) -> pd.Series:
+        """
+        Simple daily engine:
+          • Position = strategy.position(history up to t, p)
+          • Stop-loss evaluated on close-to-close (daily approx)
+          • Costs applied on position changes (turnover)
+        Returns daily returns for the window index.
+        """
+        start, end = win.start, win.stop
+        if end - start < 2:
+            return pd.Series(index=idx[start:end], data=0.0)
+
         pos = 0
-        entry_price = 0.0
-        size = 0.0
-        params_iter = iter(params)
+        entry_price = None
+        prev_price = float(close[start])
+        size = float(self.position_sizer.risk_per_trade)  # interpret as notional fraction
+        rets = np.zeros(end - start, dtype=float)
 
-        for i in range(self.train_window, len(days)):
-            d = days[i]
-            hist = df.iloc[: i + 1]
-            price = hist["close"].iloc[-1]
-            prev_price = hist["close"].iloc[-2]
-            p = next(params_iter, None)
-            p = p if p is not None else params  # handle single param
+        def _pos_at(day_i: int) -> int:
+            hist = pd.DataFrame({"close": close[:day_i+1]}, index=idx[:day_i+1])
+            try:
+                return int(self.strategy.position(hist, p))
+            except Exception:
+                return 0
 
-            new_pos = self.strategy.position(hist, p)
+        for k, t in enumerate(range(start, end)):
+            price = float(close[t])
+            new_pos = _pos_at(t)
+
+            # transaction cost on turnover
+            turnover = abs(new_pos - pos) * size
+            cost = self.cost_model.turnover_cost(turnover)
 
             if pos == 0 and new_pos != 0:
-                size = self.position_sizer.size(equity, price)
-                cost = self.cost_model.cost(price, size)
-                equity -= cost
                 entry_price = price
                 pos = new_pos
+                rets[k] = -cost
             elif pos != 0:
-                ret = (price - prev_price) / prev_price
+                # daily pnl from prior position
+                ret = pos * size * ((price - prev_price) / prev_price)
+                # stop loss check (approximated on close)
                 if self.stop_loss.hit(entry_price, price, pos):
                     new_pos = 0
-                equity += pos * size * ret
                 if new_pos != pos:
-                    cost = self.cost_model.cost(price, size)
-                    equity -= cost
+                    # apply cost on exit/flip
+                    ret -= cost
                     if new_pos != 0:
                         entry_price = price
-                        size = self.position_sizer.size(equity, price)
                 pos = new_pos
-            equity_curve.append(equity)
-            idx.append(d)
+                rets[k] = ret
+            else:
+                rets[k] = 0.0
 
-        return pd.Series(equity_curve, index=idx)
+            prev_price = price
+
+        s = pd.Series(rets, index=idx[start:end], name="return")
+        return s
