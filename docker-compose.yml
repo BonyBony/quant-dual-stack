@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   vectorbt_lab:
     build: ./research
@@ -7,12 +5,17 @@ services:
     ports:
       - "${VBT_PORT:-8888}:8888"
     volumes:
-      - .:/home/jovyan/repo
-      - ./research/notebooks:/home/jovyan/work          # notebooks
-      - ./execution/data:/home/jovyan/data              # shared data
-      - ./common:/home/jovyan/common:ro                 # shared SOLID code
-      - ./research/artifacts:/home/jovyan/artifacts     # saved models/params
+      # explicit mounts (avoid flaky root bind)
+      - ./research:/home/jovyan/repo/research
+      - ./execution:/home/jovyan/repo/execution
+      - ./common:/home/jovyan/repo/common:ro
+      - ./configs:/home/jovyan/repo/configs
+      # helpers
+      - ./research/notebooks:/home/jovyan/work
+      - ./execution/data:/home/jovyan/data
+      - ./research/artifacts:/home/jovyan/artifacts
     environment:
+      PYTHONPATH: "/home/jovyan/repo"
       JUPYTER_ENABLE_LAB: "yes"
       NB_UID: "1000"
       NB_GID: "1000"
@@ -23,7 +26,6 @@ services:
     container_name: backtrader_exec
     depends_on:
       - vectorbt_lab
-    # Run selector first, then your live + streamlit
     command: >
       sh -c "
         python jobs/select_macd_params.py &&
@@ -31,28 +33,26 @@ services:
         streamlit run monitor_app.py --server.port 8501 --server.address 0.0.0.0
       "
     env_file:
-      - .env                     # real values (copy from .env.example)
+      - .env
     ports:
       - "${BT_PORT:-8501}:8501"
     volumes:
-      - ./execution/data:/app/data
-      - ./execution/bt_config.yaml:/app/config/bt_config.yaml
-      - ./execution/cache:/app/cache                  # where params JSON lands
+      - ./execution:/app
       - ./common:/app/common:ro
       - ./research/artifacts:/app/artifacts:ro
     environment:
       TZ: "Asia/Kolkata"
 
-  # Optional one-off service to just run the selector manually
   selector:
     build: ./execution
     container_name: cpo_selector
     working_dir: /app
-    env_file: .env
+    env_file:
+      - .env
     command: python jobs/select_macd_params.py
     volumes:
       - ./execution:/app
       - ./common:/app/common:ro
       - ./research/artifacts:/app/artifacts:ro
-    profiles: ["selector"]   # run: docker compose --profile selector run selector
-
+    profiles:
+      - selector
