@@ -1,0 +1,6 @@
+{
+  "cv_rmse_mean": 0.023630164926212987,
+  "cv_rmse_std": 0.013877293574911199,
+  "splits": 5,
+  "embargo_groups": 1
+}
