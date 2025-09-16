@@ -14,7 +14,7 @@ from common.features.chan_ex7_1_daily import compute_features_daily
 from research.models.regressors import get_regressor
 from research.optimization.conditional_opt import ConditionalParamOptimizer
 from research.strategies.macd import MACDParams, MACDStrategy
-from research.evaluation.sharpe import sharpe_ratio
+from common.utils.stats import get_return_metrics
 
 # --------------------------------------------------------------------- #
 # Config dataclass
@@ -142,8 +142,8 @@ def main(cfg_path: str):
         best = cpo.predict_params(feats_today)
         pnl_oos.append(strat.run_day(slice_oos, MACDParams(**best)))
 
-    sharpe = sharpe_ratio(pd.Series(pnl_oos), cfg.objective_freq_per_year)
-    print("OOS Sharpe (quick check):", sharpe)
+    metrics = get_return_metrics(pd.Series(pnl_oos), ann_freq=cfg.objective_freq_per_year)
+    print("OOS Sharpe (quick check):", metrics.get("sharpe", float("nan")))
 
 
 # --------------------------------------------------------------------- #
