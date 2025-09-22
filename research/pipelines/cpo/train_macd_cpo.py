@@ -7,7 +7,7 @@ Train Conditional-Parameter-Optimization model for daily-bar MACD strategy
 ‣ Saves model + metadata + quick OOS Sharpe
 """
 
-import argparse, json, joblib, pathlib, yaml, pandas as pd
+import argparse, json, joblib, pathlib, yaml, pandas as pd, numpy as np
 from dataclasses import dataclass
 from common.data.yf_loader import load_daily
 from common.features.chan_ex7_1_daily import compute_features_daily
@@ -101,9 +101,18 @@ def main(cfg_path: str):
     X_rows = []
     for d in label_dates:                              # ⬅️ iterate label days
         feats = compute_features_daily(df.loc[:d], cfg.lookbacks)
+        feats = feats.replace([np.inf, -np.inf], np.nan).fillna(0.0)
         for p in pg:
             X_rows.append(pd.concat([feats, pd.Series(p.__dict__)]))
     X = pd.DataFrame(X_rows).reset_index(drop=True)
+    X = X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    if X.isnull().values.any():
+        mask = ~X.isnull().any(axis=1)
+        dropped = int((~mask).sum())
+        if dropped:
+            print(f"Dropping {dropped} rows with NaNs in features")
+        X = X.loc[mask].reset_index(drop=True)
+        y = y[mask.to_numpy()]
 
     assert len(X) == len(y), f"X rows {len(X)} != y rows {len(y)} – lengths must match"
 
@@ -139,6 +148,7 @@ def main(cfg_path: str):
         d, d_next = test_days[i], test_days[i + 1]
         slice_oos = df.loc[df.index <= d_next].tail(max_slow + 2)
         feats_today = compute_features_daily(df.loc[:d], cfg.lookbacks)
+        feats_today = feats_today.replace([np.inf, -np.inf], np.nan).fillna(0.0)
         best = cpo.predict_params(feats_today)
         pnl_oos.append(strat.run_day(slice_oos, MACDParams(**best)))
 
