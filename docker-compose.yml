@@ -39,10 +39,11 @@ services:
     volumes:
       - ./execution:/app
       - ./common:/app/common:ro
+      - ./research:/app/research:ro
       - ./research/artifacts:/app/artifacts:ro
     environment:
       TZ: "Asia/Kolkata"
-      PYTHONPATH: "/app"
+      PYTHONPATH: "/app:/app/research:/app/common"
 
   selector:
     build: ./execution
