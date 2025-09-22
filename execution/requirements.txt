@@ -3,3 +3,6 @@ streamlit
 ib_insync
 pandas
 numpy
+joblib
+yfinance
+ta

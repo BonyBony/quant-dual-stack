@@ -42,6 +42,7 @@ services:
       - ./research/artifacts:/app/artifacts:ro
     environment:
       TZ: "Asia/Kolkata"
+      PYTHONPATH: "/app"
 
   selector:
     build: ./execution
