@@ -10,7 +10,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from execution.brokers.upstox_client import OrderRequest, UpstoxClient
+try:
+    from execution.brokers.upstox_client import OrderRequest, UpstoxClient
+except ImportError:  # when run as script from package root
+    from brokers.upstox_client import OrderRequest, UpstoxClient  # type: ignore
 
 
 DATA_DIR = Path("execution/data")

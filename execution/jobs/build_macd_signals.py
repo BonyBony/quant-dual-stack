@@ -39,7 +39,7 @@ except ImportError:  # pragma: no cover - execution path without research mounte
 
 DATA_DIR = Path(os.getenv("SIGNALS_DATA_DIR", "execution/data"))
 CACHE_DIR = Path(os.getenv("CPO_OUT_DIR", "execution/cache"))
-SYMBOL = os.getenv("CPO_SYMBOL", "ZOMATO.NS")
+SYMBOL = os.getenv("CPO_SYMBOL", "HDFCBANK.NS")
 DEFAULT_LOOKBACK = os.getenv("SIGNAL_LOOKBACK", "2022-01-01")
 RISK_PER_TRADE = float(os.getenv("RISK_PER_TRADE", "0.01"))
 

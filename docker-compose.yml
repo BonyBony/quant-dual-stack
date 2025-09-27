@@ -28,8 +28,8 @@ services:
       - vectorbt_lab
     command: >
       sh -c "
-        python jobs/select_macd_params.py &&
-        python jobs/build_macd_signals.py &&
+        CPO_SYMBOL=${CPO_SYMBOL:-HDFCBANK.NS} python jobs/select_macd_params.py &&
+        CPO_SYMBOL=${CPO_SYMBOL:-HDFCBANK.NS} python jobs/build_macd_signals.py &&
         python run_live.py &
         streamlit run monitor_app.py --server.port 8501 --server.address 0.0.0.0
       "
