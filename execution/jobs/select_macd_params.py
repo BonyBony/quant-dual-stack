@@ -14,7 +14,7 @@ if not os.path.isdir(ART_DIR):
     if os.path.isdir(alt):
         ART_DIR = alt
 OUT_DIR = os.getenv("CPO_OUT_DIR", "execution/cache")
-SYMBOL  = os.getenv("CPO_SYMBOL", "ZOMATO.NS")
+SYMBOL  = os.getenv("CPO_SYMBOL", "HDFCBANK.NS")
 
 meta = json.load(open(f"{ART_DIR}/feature_meta.json"))
 model = joblib.load(f"{ART_DIR}/model.pkl")
