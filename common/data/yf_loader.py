@@ -3,16 +3,32 @@ from __future__ import annotations
 
 import pandas as pd
 import yfinance as yf
+import requests
 
 try:  # yfinance exposes the error in newer releases
     from yfinance.shared._exceptions import YFTzMissingError
 except Exception:  # pragma: no cover - older yfinance versions
     YFTzMissingError = Exception  # type: ignore
 
-try:
-    from nsepy import get_history
-except ImportError:  # pragma: no cover - optional dependency
-    get_history = None  # type: ignore
+NSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.nseindia.com/",
+    "Connection": "keep-alive",
+    "Host": "www.nseindia.com",
+    "sec-ch-ua": '"Chromium";v="124", "Not.A/Brand";v="8", "Google Chrome";v="124"',
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "sec-fetch-dest": "empty",
+    "x-requested-with": "XMLHttpRequest",
+    "pragma": "no-cache",
+    "cache-control": "no-cache",
+}
 
 def load_daily(symbol: str, start: str, end: str) -> pd.DataFrame:
     """Download daily OHLCV, falling back to NSE if Yahoo lacks metadata."""
@@ -50,25 +66,57 @@ def load_daily(symbol: str, start: str, end: str) -> pd.DataFrame:
         return out
 
     def _download_nse() -> pd.DataFrame:
-        if get_history is None:
-            raise RuntimeError("nsepy not available for NSE fallback")
         sym = symbol.replace(".NS", "").upper()
         start_dt = pd.Timestamp(start).date()
         end_dt = pd.Timestamp(end).date()
-        df = get_history(symbol=sym, start=start_dt, end=end_dt)
-        if df.empty:
-            return df
-        df = df.rename(
-            columns={
-                "Open": "open",
-                "High": "high",
-                "Low": "low",
-                "Close": "close",
-                "Volume": "volume",
-            }
-        )
-        cols = [c for c in ["open", "high", "low", "close", "volume"] if c in df.columns]
-        return df[cols].dropna(how="all").copy()
+
+        archive_headers = {
+            "User-Agent": NSE_HEADERS["User-Agent"],
+            "Accept": "application/zip,application/octet-stream",
+            "Referer": "https://www.nseindia.com/",
+        }
+
+        frames = []
+        for day in pd.date_range(start_dt, end_dt, freq="D"):
+            month = day.strftime("%b").upper()
+            url = (
+                "https://archives.nseindia.com/content/historical/EQUITIES/"
+                f"{day.year}/{month}/cm{day.strftime('%d%b%Y').upper()}bhav.csv.zip"
+            )
+            try:
+                resp = requests.get(url, headers=archive_headers, timeout=10)
+                if resp.status_code != 200:
+                    continue
+                from io import BytesIO
+                from zipfile import ZipFile
+
+                with ZipFile(BytesIO(resp.content)) as zf:
+                    name = zf.namelist()[0]
+                    with zf.open(name) as fh:
+                        day_df = pd.read_csv(fh)
+            except Exception:
+                continue
+
+            day_df = day_df.loc[day_df.get("SYMBOL") == sym]
+            if day_df.empty:
+                continue
+            row = day_df.iloc[0]
+            frames.append(
+                {
+                    "date": pd.to_datetime(row.get("TIMESTAMP")),
+                    "open": float(row.get("OPEN", float("nan"))),
+                    "high": float(row.get("HIGH", float("nan"))),
+                    "low": float(row.get("LOW", float("nan"))),
+                    "close": float(row.get("CLOSE", float("nan"))),
+                    "volume": float(row.get("TOTTRDQTY", float("nan"))),
+                }
+            )
+
+        if not frames:
+            return pd.DataFrame()
+        df = pd.DataFrame(frames).dropna(subset=["date"])
+        df = df.set_index("date").sort_index()
+        return df
 
     def _needs_fallback(err: Exception) -> bool:
         msg = str(err).lower()
