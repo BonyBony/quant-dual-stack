@@ -29,6 +29,7 @@ services:
     command: >
       sh -c "
         python jobs/select_macd_params.py &&
+        python jobs/build_macd_signals.py &&
         python run_live.py &
         streamlit run monitor_app.py --server.port 8501 --server.address 0.0.0.0
       "
