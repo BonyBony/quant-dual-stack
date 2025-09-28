@@ -76,8 +76,6 @@ def test_build_macd_signals_writes_csv(tmp_path: Path, monkeypatch):
     }, index=dates)
 
     monkeypatch.setattr(job, "load_daily", lambda *_, **__: df_prices)
-    monkeypatch.setattr(job, "DATE", None, raising=False)
-
     job.main()
 
     files = list(signal_dir.glob("signals_*.csv"))
