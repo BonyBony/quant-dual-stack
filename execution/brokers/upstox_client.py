@@ -267,6 +267,93 @@ class UpstoxClient:
                 index[normalized] = instrument.instrument_key
         return index
 
+    # ------------------------------------------------------------------ #
+    # Portfolio helpers
+    # ------------------------------------------------------------------ #
+    def _fetch_positions(self) -> List[Dict[str, Any]]:
+        endpoints = (
+            f"{self.base_url}/portfolio/short-term-positions",
+            f"{self.base_url}/portfolio/long-term-holdings",
+        )
+        aggregated: List[Dict[str, Any]] = []
+
+        for url in endpoints:
+            try:
+                resp = self.session.get(url, timeout=10)
+            except requests.exceptions.RequestException as exc:
+                logger.warning("Upstox positions request to %s failed: %s", url, exc)
+                continue
+
+            if resp.status_code == 404:
+                logger.info("Upstox endpoint %s unavailable (404)", url)
+                continue
+            if resp.status_code >= 400:
+                logger.warning(
+                    "Upstox positions request to %s failed (%s): %s",
+                    url,
+                    resp.status_code,
+                    resp.text,
+                )
+                continue
+
+            payload = resp.json()
+            entries: List[Dict[str, Any]] = []
+            if isinstance(payload, dict):
+                if isinstance(payload.get("data"), list):
+                    entries = payload.get("data", [])
+                elif isinstance(payload.get("positions"), list):
+                    entries = payload.get("positions", [])
+            elif isinstance(payload, list):
+                entries = payload
+
+            if entries:
+                aggregated.extend(entries)
+
+        return aggregated
+
+    def _match_position_entry(self, symbol: str, instrument_token: Optional[str]) -> Optional[Dict[str, Any]]:
+        symbol_norm = self._normalize_symbol(symbol)
+        token_norm = self._normalize_symbol(instrument_token)
+        positions = self._fetch_positions()
+
+        for entry in positions:
+            candidates = [
+                entry.get("instrument_token"),
+                entry.get("instrument_key"),
+                entry.get("trading_symbol"),
+                entry.get("symbol"),
+            ]
+            for candidate in candidates:
+                candidate_norm = self._normalize_symbol(candidate)
+                if not candidate_norm:
+                    continue
+                if token_norm and candidate_norm == token_norm:
+                    return entry
+                if candidate_norm == symbol_norm:
+                    return entry
+        return None
+
+    @staticmethod
+    def _extract_quantity(entry: Dict[str, Any]) -> Optional[float]:
+        quantity_keys = (
+            "net_quantity",
+            "netQty",
+            "net_qty",
+            "quantity",
+            "qty",
+            "day_quantity",
+            "dayQty",
+        )
+        for key in quantity_keys:
+            if key not in entry or entry[key] in (None, ""):
+                continue
+            value = entry[key]
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return None
+
     def _candidate_lookup_keys(self, symbol: str) -> List[str]:
         keys: List[str] = []
         normalized = self._normalize_symbol(symbol)
@@ -434,10 +521,99 @@ class UpstoxClient:
         logger.info("Upstox order placed: %s", order_id or data)
         return order_id
 
-    def close_position(self, symbol: str) -> None:
-        logger.info("close_position for %s not implemented yet", symbol)
+    def close_position(
+        self,
+        symbol: str,
+        *,
+        quantity: Optional[float] = None,
+        side: Optional[str] = None,
+        order_type: str = "LIMIT",
+        price: Optional[float] = None,
+        trigger_price: Optional[float] = None,
+        product: Optional[str] = None,
+        validity: Optional[str] = None,
+        tag: Optional[str] = None,
+    ) -> str:
+        """Flatten an open position by submitting the appropriate opposite order."""
+
+        order_type = order_type.upper()
+        instrument_token = self._lookup_instrument_token(symbol)
+        entry = self._match_position_entry(symbol, instrument_token)
+
+        if instrument_token is None and entry:
+            instrument_token = entry.get("instrument_token") or entry.get("instrument_key")
+
+        net_quantity = None
+        if entry:
+            net_quantity = self._extract_quantity(entry)
+
+        if quantity is None:
+            if net_quantity is None:
+                raise RuntimeError(f"Unable to determine quantity to close for {symbol}")
+            close_quantity = abs(net_quantity)
+        else:
+            close_quantity = float(quantity)
+
+        if close_quantity <= 0:
+            raise ValueError("close_position quantity must be positive")
+
+        if side is None:
+            if net_quantity is None or net_quantity == 0:
+                raise RuntimeError(f"Unable to infer closing side for {symbol}")
+            side = "SELL" if net_quantity > 0 else "BUY"
+        else:
+            side = side.upper()
+            if side not in {"BUY", "SELL"}:
+                raise ValueError("side must be 'BUY' or 'SELL'")
+
+        def _derive_price() -> Optional[float]:
+            if entry is None:
+                return None
+            for key in ("last_price", "ltp", "close_price", "average_price", "avg_price"):
+                if key in entry and entry[key] not in (None, ""):
+                    try:
+                        return float(entry[key])
+                    except (TypeError, ValueError):
+                        continue
+            return None
+
+        final_price: Optional[float]
+        final_trigger: Optional[float]
+        if order_type == "MARKET":
+            final_price = None
+            final_trigger = None
+        elif order_type == "SL-M":
+            final_price = None
+            final_trigger = trigger_price or price
+            if final_trigger is None:
+                derived = _derive_price()
+                final_trigger = derived
+            if final_trigger is None:
+                raise ValueError("trigger_price required for SL-M close orders")
+        else:
+            final_price = price if price is not None else _derive_price()
+            if final_price is None:
+                raise ValueError("price required for non-market close orders")
+            final_trigger = trigger_price if trigger_price is not None else final_price
+
+        request = OrderRequest(
+            symbol=symbol,
+            side=side,
+            quantity=close_quantity,
+            product=product or (entry.get("product") if entry else "D"),
+            order_type=order_type,
+            validity=validity or (entry.get("validity") if entry else "DAY"),
+            price=final_price,
+            instrument_token=instrument_token,
+            trigger_price=final_trigger,
+            tag=tag,
+        )
+        return self.place_order(request)
 
     def current_position(self, symbol: str) -> float:
-        # TODO: call /portfolio/positions once we know the desired behaviour
-        logger.info("current_position for %s not implemented; returning 0", symbol)
-        return 0.0
+        instrument_token = self._lookup_instrument_token(symbol)
+        entry = self._match_position_entry(symbol, instrument_token)
+        if not entry:
+            return 0.0
+        quantity = self._extract_quantity(entry)
+        return float(quantity or 0.0)

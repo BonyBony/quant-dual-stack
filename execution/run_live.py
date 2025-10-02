@@ -106,9 +106,28 @@ def main():
             placed = True
         elif exit_sig and last_position:
             side = "SELL" if last_position > 0 else "BUY"
-            qty = abs(last_position)
-            req = _build_order(side, qty, EXIT_ORDER_TYPE)
-            client.place_order(req)
+            base_price = close_price or last_price
+            exit_price = None
+            exit_trigger = None
+            if EXIT_ORDER_TYPE != "MARKET":
+                computed = _order_price(base_price, side, PRICE_BUFFER_BPS)
+                if computed is None:
+                    raise ValueError("Unable to derive exit price for limit order")
+                if EXIT_ORDER_TYPE == "SL-M":
+                    exit_trigger = computed
+                else:
+                    exit_price = computed
+                    exit_trigger = computed
+
+            order_id = client.close_position(
+                symbol,
+                quantity=abs(last_position),
+                side=side,
+                order_type=EXIT_ORDER_TYPE,
+                price=round(exit_price, 2) if exit_price is not None else None,
+                trigger_price=round(exit_trigger, 2) if exit_trigger is not None else None,
+            )
+            logging.info("Submitted close order %s", order_id)
             last_position = 0
             placed = True
         else:
