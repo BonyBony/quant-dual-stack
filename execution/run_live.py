@@ -16,8 +16,18 @@ except ImportError:  # when run as script from package root
     from brokers.upstox_client import OrderRequest, UpstoxClient  # type: ignore
 
 
-DATA_DIR = Path("execution/data")
-PNL_FILE = DATA_DIR / "pnl.csv"
+RAW_DATA_DIR = os.getenv("SIGNALS_DATA_DIR", "execution/data")
+DATA_DIR = Path(RAW_DATA_DIR)
+if not DATA_DIR.is_absolute():
+    DATA_DIR = (Path.cwd() / DATA_DIR).resolve()
+
+RAW_PNL_FILE = os.getenv("PNL_FILE")
+if RAW_PNL_FILE:
+    PNL_FILE = Path(RAW_PNL_FILE)
+    if not PNL_FILE.is_absolute():
+        PNL_FILE = (Path.cwd() / PNL_FILE).resolve()
+else:
+    PNL_FILE = DATA_DIR / "pnl.csv"
 POLL_SECONDS = int(os.getenv("LIVE_POLL_SECONDS", "60"))
 MAX_CYCLES = int(os.getenv("LIVE_MAX_CYCLES", "0"))
 DEFAULT_ORDER_TYPE = os.getenv("UPSTOX_ORDER_TYPE", "LIMIT").upper()
