@@ -29,7 +29,19 @@ if RAW_PNL_FILE:
 else:
     PNL_FILE = DATA_DIR / "pnl.csv"
 POLL_SECONDS = int(os.getenv("LIVE_POLL_SECONDS", "60"))
-MAX_CYCLES = int(os.getenv("LIVE_MAX_CYCLES", "0"))
+MAX_CYCLES_RAW = os.getenv("LIVE_MAX_CYCLES")
+if MAX_CYCLES_RAW is None:
+    raise RuntimeError("LIVE_MAX_CYCLES must be set (0 for infinite run)")
+MAX_CYCLES = int(MAX_CYCLES_RAW)
+STOP_AFTER_DATE_RAW = os.getenv("LIVE_STOP_AFTER_DATE")
+if not STOP_AFTER_DATE_RAW:
+    raise RuntimeError("LIVE_STOP_AFTER_DATE must be set (ISO format YYYY-MM-DD)")
+try:
+    STOP_AFTER_DATE = datetime.fromisoformat(STOP_AFTER_DATE_RAW).date()
+except ValueError as exc:
+    raise RuntimeError(
+        "LIVE_STOP_AFTER_DATE must be in ISO format YYYY-MM-DD"
+    ) from exc
 DEFAULT_ORDER_TYPE = os.getenv("UPSTOX_ORDER_TYPE", "LIMIT").upper()
 EXIT_ORDER_TYPE = os.getenv("UPSTOX_EXIT_ORDER_TYPE", DEFAULT_ORDER_TYPE).upper()
 PRICE_BUFFER_BPS = float(os.getenv("ORDER_PRICE_BUFFER_BPS", "0"))
@@ -150,9 +162,19 @@ def main():
         _append_pnl(eq_value=mark_value)
 
         cycles += 1
-        if MAX_CYCLES and cycles >= MAX_CYCLES:
-            logging.info("Reached max cycles (%s); exiting live loop", MAX_CYCLES)
-            break
+        if MAX_CYCLES == 0:
+            pass
+        else:
+            if STOP_AFTER_DATE and ts.date() >= STOP_AFTER_DATE:
+                logging.info(
+                    "Reached stop date %s (last signal %s); exiting live loop",
+                    STOP_AFTER_DATE,
+                    ts.date(),
+                )
+                break
+            if MAX_CYCLES and cycles >= MAX_CYCLES:
+                logging.info("Reached max cycles (%s); exiting live loop", MAX_CYCLES)
+                break
 
         if placed:
             time.sleep(max(POLL_SECONDS, 1))
