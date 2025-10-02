@@ -110,6 +110,7 @@ def main():
                 "entry": entry,
                 "exit": exit,
                 "flip": flip,
+                "close_price": float(df["close"].iloc[-1]),
                 "risk_fraction": RISK_PER_TRADE,
                 "macd_fast": params.fast,
                 "macd_slow": params.slow,
