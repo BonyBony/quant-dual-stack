@@ -38,7 +38,16 @@ except ImportError:  # pragma: no cover - execution path without research mounte
 
 
 DATA_DIR = Path(os.getenv("SIGNALS_DATA_DIR", "execution/data"))
-CACHE_DIR = Path(os.getenv("CPO_OUT_DIR", "execution/cache"))
+CACHE_DIR_RAW = os.getenv("CPO_OUT_DIR", "execution/cache")
+if os.path.isabs(CACHE_DIR_RAW):
+    CACHE_DIR = Path(CACHE_DIR_RAW)
+else:
+    base = Path.cwd()
+    candidate = (base / CACHE_DIR_RAW).resolve()
+    if base == Path("/app") and not candidate.parent.exists():
+        CACHE_DIR = base / "cache"
+    else:
+        CACHE_DIR = candidate
 SYMBOL = os.getenv("CPO_SYMBOL", "HDFCBANK.NS")
 DEFAULT_LOOKBACK = os.getenv("SIGNAL_LOOKBACK", "2022-01-01")
 RISK_PER_TRADE = float(os.getenv("RISK_PER_TRADE", "0.01"))
@@ -101,6 +110,7 @@ def main():
                 "entry": entry,
                 "exit": exit,
                 "flip": flip,
+                "close_price": float(df["close"].iloc[-1]),
                 "risk_fraction": RISK_PER_TRADE,
                 "macd_fast": params.fast,
                 "macd_slow": params.slow,

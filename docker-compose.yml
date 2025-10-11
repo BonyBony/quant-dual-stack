@@ -45,6 +45,8 @@ services:
     environment:
       TZ: "Asia/Kolkata"
       PYTHONPATH: "/app:/app/research:/app/common"
+      SIGNALS_DATA_DIR: "data"
+      PNL_FILE: "data/pnl.csv"
 
   selector:
     build: ./execution
