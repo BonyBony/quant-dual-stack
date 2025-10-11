@@ -47,6 +47,11 @@ EXIT_ORDER_TYPE = os.getenv("UPSTOX_EXIT_ORDER_TYPE", DEFAULT_ORDER_TYPE).upper(
 PRICE_BUFFER_BPS = float(os.getenv("ORDER_PRICE_BUFFER_BPS", "0"))
 DEFAULT_QUANTITY = float(os.getenv("ORDER_DEFAULT_QUANTITY", "1"))
 
+RAW_ORDER_LOG = os.getenv("ORDER_LOG_FILE", "data/orders.csv")
+ORDER_LOG_FILE = Path(RAW_ORDER_LOG)
+if not ORDER_LOG_FILE.is_absolute():
+    ORDER_LOG_FILE = (Path.cwd() / ORDER_LOG_FILE).resolve()
+
 
 def _latest_signal() -> tuple[pd.Series, Path] | tuple[None, None]:
     files = sorted(DATA_DIR.glob("signals_*.csv"))
@@ -63,6 +68,12 @@ def _append_pnl(eq_value: float) -> None:
     PNL_FILE.parent.mkdir(parents=True, exist_ok=True)
     row = pd.DataFrame({"ts": [datetime.utcnow()], "eq": [eq_value]})
     row.to_csv(PNL_FILE, mode="a", header=not PNL_FILE.exists(), index=False)
+
+
+def _append_order(**row: float | str | int | None) -> None:
+    ORDER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    df = pd.DataFrame([row])
+    df.to_csv(ORDER_LOG_FILE, mode="a", header=not ORDER_LOG_FILE.exists(), index=False)
 
 
 def main():
@@ -123,7 +134,19 @@ def main():
             side = "BUY" if pos > 0 else "SELL"
             qty = abs(pos) if pos != 0 else DEFAULT_QUANTITY
             req = _build_order(side, qty, DEFAULT_ORDER_TYPE)
-            client.place_order(req)
+            order_id = client.place_order(req)
+            _append_order(
+                ts=datetime.utcnow(),
+                signal_ts=ts,
+                symbol=symbol,
+                side=side,
+                order_type=req.order_type,
+                action="ENTRY" if entry and not flip else "FLIP",
+                quantity=req.quantity,
+                price=req.price,
+                trigger_price=req.trigger_price,
+                order_id=order_id,
+            )
             last_position = pos
             placed = True
         elif exit_sig and last_position:
@@ -150,6 +173,18 @@ def main():
                 trigger_price=round(exit_trigger, 2) if exit_trigger is not None else None,
             )
             logging.info("Submitted close order %s", order_id)
+            _append_order(
+                ts=datetime.utcnow(),
+                signal_ts=ts,
+                symbol=symbol,
+                side=side,
+                order_type=EXIT_ORDER_TYPE,
+                action="EXIT",
+                quantity=abs(last_position),
+                price=round(exit_price, 2) if exit_price is not None else None,
+                trigger_price=round(exit_trigger, 2) if exit_trigger is not None else None,
+                order_id=order_id,
+            )
             last_position = 0
             placed = True
         else:

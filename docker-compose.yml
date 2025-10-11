@@ -47,6 +47,7 @@ services:
       PYTHONPATH: "/app:/app/research:/app/common"
       SIGNALS_DATA_DIR: "data"
       PNL_FILE: "data/pnl.csv"
+      ORDER_LOG_FILE: "data/orders.csv"
 
   selector:
     build: ./execution

@@ -17,6 +17,7 @@ __pycache__/
 data/*.csv
 execution/data/pnl.csv
 execution/data/signals_*.csv
+execution/data/orders.csv
 execution/cache/
 
 # --- Docker artifacts ------------------
