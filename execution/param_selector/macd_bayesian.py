@@ -24,11 +24,13 @@ class MacdBounds:
 class MacdSharpeObjective:
     """Evaluate MACD strategy Sharpe ratio for a set of parameters."""
 
-    def __init__(self, close: pd.Series) -> None:
+    def __init__(self, close: pd.Series, *, cost_bps: float = 0.0, long_only: bool = False) -> None:
         clean = close.dropna().astype(float)
         if clean.empty:
             raise ValueError("Close price series is empty")
         self.close = clean
+        self.cost = float(cost_bps) / 10_000.0
+        self.long_only = long_only
 
     def evaluate(self, params: Sequence[int]) -> float:
         fast, slow, signal = params
@@ -42,13 +44,20 @@ class MacdSharpeObjective:
         macd_signal = macd.ewm(span=signal, adjust=False).mean()
         hist = macd - macd_signal
 
-        position = pd.Series(0.0, index=close.index)
-        position.loc[hist > 0] = 1.0
-        position.loc[hist < 0] = -1.0
+        if self.long_only:
+            position = pd.Series(0.0, index=close.index)
+            position.loc[hist > 0] = 1.0
+        else:
+            position = pd.Series(0.0, index=close.index)
+            position.loc[hist > 0] = 1.0
+            position.loc[hist < 0] = -1.0
         position = position.shift(1).fillna(0.0)  # enter next day
 
         returns = close.pct_change().fillna(0.0)
         strat_returns = position * returns
+        if self.cost > 0:
+            trades = position.diff().abs()
+            strat_returns -= trades * self.cost
         if strat_returns.std(ddof=0) == 0:
             return float("-inf")
         sharpe = strat_returns.mean() / strat_returns.std(ddof=0) * math.sqrt(252)
