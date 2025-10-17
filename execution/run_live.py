@@ -46,6 +46,8 @@ DEFAULT_ORDER_TYPE = os.getenv("UPSTOX_ORDER_TYPE", "LIMIT").upper()
 EXIT_ORDER_TYPE = os.getenv("UPSTOX_EXIT_ORDER_TYPE", DEFAULT_ORDER_TYPE).upper()
 PRICE_BUFFER_BPS = float(os.getenv("ORDER_PRICE_BUFFER_BPS", "0"))
 DEFAULT_QUANTITY = float(os.getenv("ORDER_DEFAULT_QUANTITY", "1"))
+COST_BPS = float(os.getenv("MACD_COST_BPS", "5.0"))
+LONG_ONLY = os.getenv("MACD_LONG_ONLY", "true").lower() != "false"
 
 RAW_ORDER_LOG = os.getenv("ORDER_LOG_FILE", "data/orders.csv")
 ORDER_LOG_FILE = Path(RAW_ORDER_LOG)
@@ -82,6 +84,7 @@ def main():
     last_ts = None
     last_position = 0
     last_price = 0.0
+    last_size = DEFAULT_QUANTITY
     cycles = 0
 
     while True:
@@ -102,6 +105,9 @@ def main():
         flip = bool(sig_row.get("flip", 0))
         risk_fraction = float(sig_row.get("risk_fraction", 0.0))
         close_price = float(sig_row.get("close_price", 0.0))
+        target_size = float(sig_row.get("target_position_size", DEFAULT_QUANTITY))
+        expected_cost = float(sig_row.get("expected_cost_pct", COST_BPS / 10_000.0))
+        long_only_flag = bool(int(sig_row.get("long_only", int(LONG_ONLY)))) if "long_only" in sig_row else LONG_ONLY
 
         logging.info("Processing signal %s from %s", ts, sig_path.name)
 
@@ -132,7 +138,7 @@ def main():
         placed = False
         if flip or entry:
             side = "BUY" if pos > 0 else "SELL"
-            qty = abs(pos) if pos != 0 else DEFAULT_QUANTITY
+            qty = target_size if pos > 0 else target_size
             req = _build_order(side, qty, DEFAULT_ORDER_TYPE)
             order_id = client.place_order(req)
             _append_order(
@@ -148,6 +154,7 @@ def main():
                 order_id=order_id,
             )
             last_position = pos
+            last_size = req.quantity
             placed = True
         elif exit_sig and last_position:
             side = "SELL" if last_position > 0 else "BUY"
@@ -166,7 +173,7 @@ def main():
 
             order_id = client.close_position(
                 symbol,
-                quantity=abs(last_position),
+                quantity=abs(last_size),
                 side=side,
                 order_type=EXIT_ORDER_TYPE,
                 price=round(exit_price, 2) if exit_price is not None else None,
@@ -180,12 +187,13 @@ def main():
                 side=side,
                 order_type=EXIT_ORDER_TYPE,
                 action="EXIT",
-                quantity=abs(last_position),
+                quantity=abs(last_size),
                 price=round(exit_price, 2) if exit_price is not None else None,
                 trigger_price=round(exit_trigger, 2) if exit_trigger is not None else None,
                 order_id=order_id,
             )
             last_position = 0
+            last_size = DEFAULT_QUANTITY
             placed = True
         else:
             logging.info("No actionable change (holding position %s)", pos)
