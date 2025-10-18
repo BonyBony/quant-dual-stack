@@ -1,0 +1,35 @@
+# Baseline MACD WF long-only configuration
+symbol: "^NSEI"
+start_date: "2015-01-01"
+end_date: null  # use latest available
+cost_bps: 5
+macd:
+  fast: 15
+  slow: 106
+  signal: 6
+filters:
+  histogram:
+    sigma: 0.5
+  weekly_trend: true
+  confirm_bars: 3
+  rsi:
+    length: 14
+    max: 60
+  mfi:
+    length: 14
+    rise_bars: 1
+  volume:
+    lookback: 20
+    multiplier: 1.0
+  atr:
+    lookback: 14
+    min_ratio: 0.0
+    max_ratio: 2.0
+risk_budget: 0.01
+atr_lookback: 14
+position_long_only: true
+rebalance: "daily"
+outputs:
+  results_csv: "experiments/exp_00_baseline/results.csv"
+  equity_curve_png: "experiments/exp_00_baseline/equity_curve.png"
+  trade_log_parquet: "experiments/exp_00_baseline/trade_log.parquet"
