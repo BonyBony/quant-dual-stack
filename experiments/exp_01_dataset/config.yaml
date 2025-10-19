@@ -1,20 +1,10 @@
 start_date: "2015-01-01"
 end_date: null
 buffer_days: 250
-universe:
-  - ^NSEI
-  - HDFCBANK.NS
-  - RELIANCE.NS
-  - TCS.NS
-  - INFY.NS
-  - ITC.NS
-  - ICICIBANK.NS
-  - KOTAKBANK.NS
-  - SBIN.NS
-  - AXISBANK.NS
-  - LT.NS
-  - BHARTIARTL.NS
+universe_file: "research/config/nifty_universe.txt"
+feature_config: "research/config/features.yaml"
 outputs:
   features: "data/features.parquet"
   labels: "data/labels.parquet"
   meta: "data/meta.json"
+  corr_png: "data/feature_corr.png"
