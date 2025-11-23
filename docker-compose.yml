@@ -10,6 +10,12 @@ services:
       - ./execution:/home/jovyan/repo/execution
       - ./common:/home/jovyan/repo/common:ro
       - ./configs:/home/jovyan/repo/configs
+      # NEW: ML pipeline folders
+      - ./jobs:/home/jovyan/repo/jobs
+      - ./scripts:/home/jovyan/repo/scripts
+      - ./docs:/home/jovyan/repo/docs
+      - ./tests:/home/jovyan/repo/tests
+      - ./data:/home/jovyan/repo/data
       # helpers
       - ./research/notebooks:/home/jovyan/work
       - ./execution/data:/home/jovyan/data
