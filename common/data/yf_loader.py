@@ -30,6 +30,77 @@ NSE_HEADERS = {
     "cache-control": "no-cache",
 }
 
+def load_daily_multi(symbols: list[str], start: str, end: str, *, max_workers: int = 5) -> pd.DataFrame:
+    """
+    Download daily OHLCV for multiple symbols in parallel.
+
+    Returns a multi-indexed DataFrame with (date, symbol) index and OHLCV columns.
+    Falls back to NSE for individual symbols if Yahoo fails.
+
+    Parameters
+    ----------
+    symbols : list[str]
+        List of Yahoo Finance tickers (e.g., ["RELIANCE.NS", "TCS.NS"])
+    start : str
+        Start date (ISO format)
+    end : str
+        End date (ISO format)
+    max_workers : int, default 5
+        Number of parallel download threads
+
+    Returns
+    -------
+    pd.DataFrame
+        Multi-indexed DataFrame: index=(date, symbol), columns=[open, high, low, close, volume]
+
+    Examples
+    --------
+    >>> df = load_daily_multi(["RELIANCE.NS", "TCS.NS"], "2023-01-01", "2024-01-01")
+    >>> df.loc[("2023-01-15", "RELIANCE.NS"), "close"]
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    def _load_single(sym: str) -> tuple[str, pd.DataFrame]:
+        """Load single symbol and return (symbol, df) tuple."""
+        try:
+            df = load_daily(sym, start, end)
+            if not df.empty:
+                df["symbol"] = sym
+                return sym, df
+        except Exception as e:
+            logger.warning(f"Failed to load {sym}: {e}")
+        return sym, pd.DataFrame()
+
+    # Download in parallel
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_load_single, sym): sym for sym in symbols}
+        for future in as_completed(futures):
+            sym, df = future.result()
+            if not df.empty:
+                results[sym] = df
+
+    if not results:
+        return pd.DataFrame()
+
+    # Concatenate and create multi-index
+    combined = pd.concat(results.values(), axis=0)
+    combined = combined.reset_index()
+    combined = combined.rename(columns={"index": "date", "Date": "date"})
+
+    # Ensure date column exists
+    if "date" not in combined.columns:
+        combined["date"] = combined.index
+
+    combined = combined.set_index(["date", "symbol"])
+    combined = combined.sort_index()
+
+    return combined
+
+
 def load_daily(symbol: str, start: str, end: str) -> pd.DataFrame:
     """Download daily OHLCV, falling back to NSE if Yahoo lacks metadata."""
 
