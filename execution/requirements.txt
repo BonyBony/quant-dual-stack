@@ -8,3 +8,6 @@ yfinance
 ta
 scikit-learn==1.3.1
 requests
+pyyaml
+matplotlib
+pytest

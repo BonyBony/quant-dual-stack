@@ -1,0 +1,38 @@
+trend:
+  enabled: true
+  macd:
+    window_fast: 12
+    window_slow: 26
+    window_sign: 9
+  ppo:
+    window_fast: 12
+    window_slow: 26
+    window_sign: 9
+  ema_windows: [10, 20, 50]
+  adx_window: 14
+mean_reversion:
+  enabled: true
+  rsi_window: 14
+  return_z_window: 20
+  bollinger_window: 20
+volatility:
+  enabled: true
+  atr_window: 14
+  realised_vol_window: 20
+volume_flow:
+  enabled: true
+  volume_window: 20
+  mfi_window: 14
+microstructure:
+  enabled: true
+regime:
+  enabled: true
+  weekly_macd:
+    enabled: true
+    params:
+      window_fast: 12
+      window_slow: 26
+      window_sign: 9
+  weekly_rsi:
+    enabled: true
+    window: 14
