@@ -1,0 +1,72 @@
+================================================================================
+NIFTY 50 SHORT-TERM TRADING MODEL - FINAL REPORT
+================================================================================
+
+Experiment Date: 2025-12-13 09:38:04
+
+Capital: ₹100,000
+Holding Period: 5 days
+Transaction Cost: 0.15% per trade
+
+Data Period:
+  Training:   2019-01-01 to 2021-12-31
+  Validation: 2022-01-01 to 2022-12-31
+  Test:       2023-01-01 to 2025-12-13
+
+================================================================================
+PERFORMANCE SUMMARY
+================================================================================
+
+         Strategy  Total Return (%)  Annual Return (%)  Volatility (%)  Sharpe Ratio  Max Drawdown (%)  Win Rate (%)  Profit Factor  Calmar Ratio  Number of Trades
+Linear Regression        337.076812          62.557595     1354.434181      0.042496        -46.652743     23.921569       1.515169      1.340920               177
+            Lasso        691.459058          97.675526     1885.644274      0.049148        -64.242390     52.679739       1.334231      1.520422                 1
+            Ridge        664.327083          95.417105     1881.403625      0.048058        -64.242390     52.156863       1.330921      1.485267                11
+      Elastic Net        691.459058          97.675526     1885.644274      0.049148        -64.242390     52.679739       1.334231      1.520422                 1
+       Buy & Hold        692.652809          97.773691     1885.603300      0.049201        -64.242390     52.679739       1.334517      1.521950               765
+
+================================================================================
+OVERFITTING ANALYSIS
+================================================================================
+
+            Model  Train MSE  Val MSE  Test MSE  Train R²    Val R²   Test R²
+Linear Regression   7.043873 6.329399  7.760081  0.100846 -0.010152 -0.101449
+            Lasso   7.833893 6.300257  7.078223  0.000000 -0.005501 -0.004667
+            Ridge   7.763753 6.237055  7.058431  0.008953  0.004586 -0.001858
+      Elastic Net   7.833893 6.300257  7.078223  0.000000 -0.005501 -0.004667
+
+================================================================================
+KEY INSIGHTS
+================================================================================
+
+Best Model: Lasso
+  - Sharpe Ratio: 0.05
+  - Annual Return: 97.68%
+  - Max Drawdown: -64.24%
+  - Win Rate: 52.68%
+  - Number of Trades: 1
+
+Vs Buy & Hold:
+  - Outperformance: -0.10%
+  - Better Sharpe: False
+  - Lower Drawdown: False
+
+================================================================================
+CONCLUSION
+================================================================================
+
+❌ Model shows WEAK SIGNAL:
+   - Limited predictive power
+   - May not beat transaction costs consistently
+   - Recommend trying non-linear models or different features
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Review feature importance - which features matter most?
+2. Check for data leakage - verify all features are truly lagged
+3. Test non-linear models (Random Forest, XGBoost)
+4. Implement walk-forward validation with quarterly retraining
+5. Add FII/DII flow data if available
+6. Consider regime-specific models
+7. Optimize position sizing based on prediction confidence
